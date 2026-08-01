@@ -1,8 +1,9 @@
 /** AI provider abstraction (spec §11). All AI runs server-side behind this
  * interface so the real Anthropic implementation can drop in later without
  * touching the routes or UI. For M1 we use a deterministic mock. */
-import { AnalyzeResponse } from "@/lib/schemas";
+import { AnalyzeResponse, GenerateRecipesResponse } from "@/lib/schemas";
 import { nextMockDetection } from "./fixtures";
+import { mockGenerateRecipes, type GenerateInput } from "./recipe-fixtures";
 
 export interface AnalyzeInput {
   /** How many images were submitted (mock ignores pixels). */
@@ -12,6 +13,7 @@ export interface AnalyzeInput {
 export interface AiProvider {
   readonly name: string;
   analyzeIngredients(input: AnalyzeInput): Promise<AnalyzeResponse>;
+  generateRecipes(input: GenerateInput): Promise<GenerateRecipesResponse>;
 }
 
 const mockProvider: AiProvider = {
@@ -19,11 +21,17 @@ const mockProvider: AiProvider = {
   async analyzeIngredients() {
     // Simulate processing latency so the scanning state is visible.
     await new Promise((r) => setTimeout(r, 900));
-    const parsed = AnalyzeResponse.parse({
+    return AnalyzeResponse.parse({
       ingredients: nextMockDetection(),
       modelName: "mock-fixtures-1",
     });
-    return parsed;
+  },
+  async generateRecipes(input) {
+    await new Promise((r) => setTimeout(r, 1100));
+    return GenerateRecipesResponse.parse({
+      recipes: mockGenerateRecipes(input),
+      modelName: "mock-fixtures-1",
+    });
   },
 };
 

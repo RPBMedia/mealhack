@@ -8,37 +8,37 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import type { ConfirmedIngredient } from "@/lib/schemas";
+import type {
+  ConfirmedIngredient,
+  GeneratedRecipe,
+  Preferences,
+} from "@/lib/schemas";
 
-/** Pantry staples the app always assumes (spec §6.5). */
-export const DEFAULT_STAPLES = ["salt", "black pepper", "cooking oil", "water"];
-export const OPTIONAL_STAPLES = [
-  "butter",
-  "flour",
-  "sugar",
-  "garlic",
-  "onions",
-  "rice",
-  "pasta",
-  "soy sauce",
-  "vinegar",
-  "dried herbs",
-  "common spices",
-];
+export { DEFAULT_STAPLES, OPTIONAL_STAPLES } from "@/lib/staples";
 
 export interface MealSession {
   confirmed: ConfirmedIngredient[];
   /** Enabled OPTIONAL staples (defaults are always on). */
   staples: string[];
+  preferences: Preferences | null;
+  recipes: GeneratedRecipe[];
 }
 
-const EMPTY: MealSession = { confirmed: [], staples: [] };
+const EMPTY: MealSession = {
+  confirmed: [],
+  staples: [],
+  preferences: null,
+  recipes: [],
+};
 const KEY = "mealhack.session";
 
 interface Api {
   session: MealSession;
+  update(patch: Partial<MealSession>): void;
   setConfirmed(list: ConfirmedIngredient[]): void;
   setStaples(list: string[]): void;
+  setPreferences(p: Preferences): void;
+  setRecipes(r: GeneratedRecipe[]): void;
   reset(): void;
 }
 
@@ -56,43 +56,28 @@ export function MealSessionProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const persist = useCallback((next: MealSession) => {
-    setSession(next);
-    try {
-      sessionStorage.setItem(KEY, JSON.stringify(next));
-    } catch {
-      /* private mode */
-    }
+  const update = useCallback((patch: Partial<MealSession>) => {
+    setSession((s) => {
+      const next = { ...s, ...patch };
+      try {
+        sessionStorage.setItem(KEY, JSON.stringify(next));
+      } catch {
+        /* private mode */
+      }
+      return next;
+    });
   }, []);
 
-  const setConfirmed = useCallback(
-    (list: ConfirmedIngredient[]) =>
-      setSession((s) => {
-        const next = { ...s, confirmed: list };
-        try {
-          sessionStorage.setItem(KEY, JSON.stringify(next));
-        } catch {}
-        return next;
-      }),
-    [],
-  );
-
-  const setStaples = useCallback(
-    (list: string[]) =>
-      setSession((s) => {
-        const next = { ...s, staples: list };
-        try {
-          sessionStorage.setItem(KEY, JSON.stringify(next));
-        } catch {}
-        return next;
-      }),
-    [],
-  );
-
-  const reset = useCallback(() => persist(EMPTY), [persist]);
+  const setConfirmed = useCallback((list: ConfirmedIngredient[]) => update({ confirmed: list }), [update]);
+  const setStaples = useCallback((list: string[]) => update({ staples: list }), [update]);
+  const setPreferences = useCallback((p: Preferences) => update({ preferences: p }), [update]);
+  const setRecipes = useCallback((r: GeneratedRecipe[]) => update({ recipes: r }), [update]);
+  const reset = useCallback(() => update(EMPTY), [update]);
 
   return (
-    <Ctx.Provider value={{ session, setConfirmed, setStaples, reset }}>
+    <Ctx.Provider
+      value={{ session, update, setConfirmed, setStaples, setPreferences, setRecipes, reset }}
+    >
       {children}
     </Ctx.Provider>
   );

@@ -1,0 +1,59 @@
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { getProvider } from "@/ai/provider";
+import { Preferences } from "@/lib/schemas";
+import { validateRecipeSet } from "@/lib/validate-recipes";
+
+const Body = z.object({
+  available: z.array(z.object({ name: z.string(), useFirst: z.boolean() })).min(1),
+  staples: z.array(z.string()),
+  preferences: Preferences,
+});
+
+/** POST /api/recipes/generate — returns exactly three validated recipes. AI
+ * stays server-side; output is validated (and repaired once) before it ever
+ * reaches the client (spec §6.8, §11). */
+export async function POST(req: Request) {
+  const parsed = Body.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: "Add at least one ingredient before generating recipes." },
+      { status: 400 },
+    );
+  }
+  const input = parsed.data;
+  const provider = getProvider();
+  const genInput = {
+    available: input.available,
+    staples: input.staples,
+    prefs: input.preferences,
+  };
+
+  try {
+    let result = await provider.generateRecipes(genInput);
+    let check = validateRecipeSet(result.recipes, input.preferences);
+
+    // One repair attempt (spec §6.8) — for the mock this is a regenerate.
+    if (!check.ok) {
+      result = await provider.generateRecipes(genInput);
+      check = validateRecipeSet(result.recipes, input.preferences);
+    }
+
+    if (!check.ok) {
+      return NextResponse.json(
+        {
+          error:
+            "We couldn't put together three solid recipes from that. Try adjusting your ingredients or constraints.",
+        },
+        { status: 422 },
+      );
+    }
+
+    return NextResponse.json(result);
+  } catch {
+    return NextResponse.json(
+      { error: "Recipe generation failed. Please try again." },
+      { status: 500 },
+    );
+  }
+}
