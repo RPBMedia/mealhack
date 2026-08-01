@@ -1,19 +1,45 @@
 import { NextResponse } from "next/server";
 import { getProvider } from "@/ai/provider";
+import { clientIp, rateLimit } from "@/lib/rate-limit";
+
+const MAX_IMAGES = 5;
+const MAX_BYTES = 8 * 1024 * 1024; // per image, after client compression
 
 /** POST /api/analyze — multipart form with one or more `images`. Returns the
  * validated detected-ingredient list. AI stays server-side (spec §11). */
 export async function POST(req: Request) {
+  if (!rateLimit(`analyze:${clientIp(req)}`, 30, 10 * 60 * 1000)) {
+    return NextResponse.json(
+      { error: "You're scanning very quickly — please wait a moment." },
+      { status: 429 },
+    );
+  }
+
+  const form = await req.formData().catch(() => null);
+  const files = (form?.getAll("images") ?? []).filter(
+    (f): f is File => f instanceof File,
+  );
+  if (files.length < 1) {
+    return NextResponse.json(
+      { error: "Add at least one photo to scan." },
+      { status: 400 },
+    );
+  }
+  if (files.length > MAX_IMAGES || files.some((f) => f.size > MAX_BYTES)) {
+    return NextResponse.json(
+      { error: "Please use up to 5 photos and keep each one small." },
+      { status: 413 },
+    );
+  }
+
   try {
-    const form = await req.formData().catch(() => null);
-    const imageCount = form ? form.getAll("images").length : 0;
-    if (imageCount < 1) {
-      return NextResponse.json(
-        { error: "Add at least one photo to scan." },
-        { status: 400 },
-      );
-    }
-    const result = await getProvider().analyzeIngredients({ imageCount });
+    const images = await Promise.all(
+      files.map(async (f) => ({
+        data: Buffer.from(await f.arrayBuffer()).toString("base64"),
+        mediaType: f.type || "image/jpeg",
+      })),
+    );
+    const result = await getProvider().analyzeIngredients({ images });
     return NextResponse.json(result);
   } catch {
     return NextResponse.json(

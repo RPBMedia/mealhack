@@ -1,36 +1,72 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Mealhack
 
-## Getting Started
+**Hack dinner with what you have.** Photograph the ingredients in your fridge or
+pantry, confirm what was detected, and get three practical recipes you can
+genuinely cook tonight.
 
-First, run the development server:
+Mobile-first **PWA** built with Next.js. `MEALHACK_PRODUCT_SPEC.md` is the
+product source of truth.
+
+## Status — Milestone 1 (MVP)
+
+The complete **anonymous** journey works end-to-end:
+
+`landing → scan → analyse → confirm → preferences → 3 recipes → cook → feedback`
+
+- 📷 Multi-photo capture/upload with client-side compression + EXIF stripping
+- 🧠 AI ingredient recognition behind a **server-side provider abstraction**
+- ✅ Mandatory, editable ingredient confirmation + pantry staples
+- 🍳 Preferences (servings / time / effort / diet / **allergies** / child-friendly)
+- 🍽️ Exactly **three** validated recipes (fastest / best / different), with a
+  programmatic validation + one repair attempt before anything is shown
+- 👩‍🍳 Guided cooking mode (one step at a time, timers, screen wake-lock)
+- 📊 Analytics funnel events incl. the north-star `recipe_cooked`
+
+**Runs with zero keys** on a deterministic mock. Set `ANTHROPIC_API_KEY` to use
+real Claude — no UI changes.
+
+## Stack
+
+Next.js (App Router) · TypeScript (strict) · Tailwind v4 · Zod · Anthropic
+Claude (multimodal, server-only) · Vercel. Playwright (e2e) + Vitest (unit).
+
+## Getting started
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+cp .env.example .env.local   # optional — app runs on mock AI with none set
+npm run dev                  # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Scripts
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| Script | Purpose |
+|---|---|
+| `npm run dev` | Dev server |
+| `npm run build` | Production build |
+| `npm run lint` | ESLint |
+| `npm run test` | Vitest unit tests |
+| `npm run test:e2e` | Playwright end-to-end (uses installed Chrome) |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## AI architecture
 
-## Learn More
+All AI runs **server-side** through `src/ai/provider.ts`:
 
-To learn more about Next.js, take a look at the following resources:
+- `getProvider()` returns the **mock** unless `ANTHROPIC_API_KEY` is set (and
+  `MEALHACK_AI !== "mock"`), in which case it returns the Anthropic provider.
+- Prompts are version-controlled in `src/ai/prompts/`.
+- Every model response is parsed and **Zod-validated**; recipes additionally go
+  through `validateRecipeSet` with one repair attempt.
+- Image text is treated as untrusted (prompt-injection resistance).
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Routes: `POST /api/analyze`, `POST /api/recipes/generate`.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Environment variables
 
-## Deploy on Vercel
+See `.env.example`. None are required for the mock experience. `ANTHROPIC_API_KEY`
+enables real AI; Supabase/PostHog/Sentry/Upstash arrive with later milestones.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Roadmap
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Milestones 1–6 (MVP → accounts → family mode → waste reduction → validation →
+native). See `MEALHACK_PRODUCT_SPEC.md`.

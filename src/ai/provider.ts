@@ -4,10 +4,18 @@
 import { AnalyzeResponse, GenerateRecipesResponse } from "@/lib/schemas";
 import { nextMockDetection } from "./fixtures";
 import { mockGenerateRecipes, type GenerateInput } from "./recipe-fixtures";
+import { anthropicProvider } from "./anthropic";
+
+export interface InputImage {
+  /** base64-encoded image bytes. */
+  data: string;
+  /** e.g. "image/jpeg". */
+  mediaType: string;
+}
 
 export interface AnalyzeInput {
-  /** How many images were submitted (mock ignores pixels). */
-  imageCount: number;
+  /** Submitted images (the mock ignores pixels; the real provider reads them). */
+  images: InputImage[];
 }
 
 export interface AiProvider {
@@ -35,8 +43,12 @@ const mockProvider: AiProvider = {
   },
 };
 
-/** Choose the provider. Real Claude is added later, gated on ANTHROPIC_API_KEY
- * and MEALHACK_AI !== "mock". Until then, always the mock. */
+/** Choose the provider: real Claude when a key is present (and not explicitly
+ * forced to mock), otherwise the deterministic mock so the app runs with no
+ * keys. */
 export function getProvider(): AiProvider {
+  if (process.env.MEALHACK_AI !== "mock" && process.env.ANTHROPIC_API_KEY) {
+    return anthropicProvider;
+  }
   return mockProvider;
 }

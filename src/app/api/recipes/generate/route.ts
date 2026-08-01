@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getProvider } from "@/ai/provider";
 import { Preferences } from "@/lib/schemas";
 import { validateRecipeSet } from "@/lib/validate-recipes";
+import { clientIp, rateLimit } from "@/lib/rate-limit";
 
 const Body = z.object({
   available: z.array(z.object({ name: z.string(), useFirst: z.boolean() })).min(1),
@@ -14,6 +15,12 @@ const Body = z.object({
  * stays server-side; output is validated (and repaired once) before it ever
  * reaches the client (spec §6.8, §11). */
 export async function POST(req: Request) {
+  if (!rateLimit(`generate:${clientIp(req)}`, 40, 10 * 60 * 1000)) {
+    return NextResponse.json(
+      { error: "Too many requests — please wait a moment." },
+      { status: 429 },
+    );
+  }
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
     return NextResponse.json(
