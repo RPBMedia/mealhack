@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Fraunces, Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
+import { MealSessionProvider } from "@/lib/session";
 
 const fraunces = Fraunces({
   variable: "--font-fraunces",
@@ -47,7 +48,7 @@ export default function RootLayout({
       className={`${fraunces.variable} ${jakarta.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        {children}
+        <MealSessionProvider>{children}</MealSessionProvider>
         <ServiceWorkerRegister />
       </body>
     </html>
