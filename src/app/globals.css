@@ -1,26 +1,79 @@
 @import "tailwindcss";
 
+/* Mealhack design tokens — warm, calm, domestic-premium. A single confident
+   food accent (basil green) on warm neutrals, plus an amber "heat" accent for
+   cooking/timer moments and a tomato tone for missing/alerts. Both themes are
+   defined at the token level. */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --salt: #faf6ef; /* warm page background */
+  --paper: #ffffff; /* cards / raised surfaces */
+  --paper-sunk: #f2ece1; /* insets, chips */
+  --ink: #23211c; /* charcoal text (warm bias) */
+  --ink-soft: #6b6558; /* secondary text */
+  --ink-faint: #9a927f; /* captions */
+  --line: rgba(35, 33, 28, 0.1);
+  --basil: #3c7a4e; /* primary accent */
+  --basil-strong: #2f6640;
+  --basil-tint: #e8f1e8;
+  --ember: #e0873a; /* heat / timers / warm highlight */
+  --tomato: #c9503a; /* alerts / missing ingredients */
+  --radius: 1rem;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --salt: #17150f;
+    --paper: #211e17;
+    --paper-sunk: #2b271e;
+    --ink: #f4efe4;
+    --ink-soft: #b8b09c;
+    --ink-faint: #857d6b;
+    --line: rgba(244, 239, 228, 0.12);
+    --basil: #6bbd7f;
+    --basil-strong: #55a869;
+    --basil-tint: #22301f;
+    --ember: #efac5f;
+    --tomato: #e0705a;
   }
 }
 
+@theme inline {
+  --color-salt: var(--salt);
+  --color-paper: var(--paper);
+  --color-paper-sunk: var(--paper-sunk);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-ink-faint: var(--ink-faint);
+  --color-line: var(--line);
+  --color-basil: var(--basil);
+  --color-basil-strong: var(--basil-strong);
+  --color-basil-tint: var(--basil-tint);
+  --color-ember: var(--ember);
+  --color-tomato: var(--tomato);
+
+  --font-display: var(--font-fraunces);
+  --font-sans: var(--font-jakarta);
+  --radius-xl: var(--radius);
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--salt);
+  color: var(--ink);
+  font-family: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Respect reduced motion globally. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* Accessible keyboard focus ring. */
+:focus-visible {
+  outline: 2px solid var(--basil);
+  outline-offset: 2px;
 }
