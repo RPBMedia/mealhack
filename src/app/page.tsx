@@ -33,8 +33,8 @@ export default function Home() {
               <ButtonLink href="/scan" className="w-full sm:w-auto">
                 📷 Scan ingredients
               </ButtonLink>
-              <ButtonLink href="/scan" variant="soft" className="w-full sm:w-auto">
-                Try with a photo
+              <ButtonLink href="/type" variant="soft" className="w-full sm:w-auto">
+                ⌨️ Type what you have
               </ButtonLink>
             </div>
             <p className="mt-4 text-sm text-ink-faint">

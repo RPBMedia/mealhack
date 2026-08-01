@@ -156,6 +156,15 @@ export default function ScanPage() {
             </Button>
           </div>
 
+          <div className="mt-3 text-center">
+            <Link
+              href="/type"
+              className="text-sm font-600 text-basil hover:text-basil-strong"
+            >
+              ⌨️ or type your ingredients instead →
+            </Link>
+          </div>
+
           {error && (
             <p
               role="alert"
