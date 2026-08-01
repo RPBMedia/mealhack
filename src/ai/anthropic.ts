@@ -10,6 +10,7 @@ import {
   RECIPE_GENERATION_SYSTEM,
   recipeGenerationUser,
 } from "./prompts/recipe-generation";
+import { RECIPE_REPAIR_SYSTEM } from "./prompts/recipe-repair";
 
 let client: Anthropic | null = null;
 function anthropic(): Anthropic {
@@ -75,22 +76,71 @@ export const anthropicProvider: AiProvider = {
   },
 
   async generateRecipes(input: GenerateInput) {
-    const msg = await anthropic().messages.create({
+    const first = await anthropic().messages.create({
       model: model(),
-      max_tokens: 4000,
+      max_tokens: 8000,
       system: RECIPE_GENERATION_SYSTEM,
       messages: [{ role: "user", content: recipeGenerationUser(input) }],
     });
+    const firstText = textOf(first);
 
-    const obj = extractJson(textOf(msg)) as {
-      recipes?: Array<Record<string, unknown>>;
-    };
-    const recipes = (obj.recipes ?? []).map((r, idx) => ({
+    const parsed = coerceRecipes(firstText);
+    if (parsed.success) return parsed.data;
+
+    // One repair attempt with the raw output + validation errors (spec §6.8).
+    const repair = await anthropic().messages.create({
+      model: model(),
+      max_tokens: 8000,
+      system: RECIPE_REPAIR_SYSTEM,
+      messages: [
+        {
+          role: "user",
+          content: JSON.stringify({
+            invalidOutput: firstText.slice(0, 12000),
+            schemaErrors: parsed.error.issues.slice(0, 12),
+          }),
+        },
+      ],
+    });
+    const repaired = coerceRecipes(textOf(repair));
+    if (repaired.success) return repaired.data;
+    throw new Error("recipe output failed schema after repair");
+  },
+};
+
+/** Parse model text into a validated recipes response, filling sane defaults
+ * for fields models commonly omit. Returns a Zod SafeParse result. */
+function coerceRecipes(text: string) {
+  let obj: { recipes?: Array<Record<string, unknown>> } = {};
+  try {
+    obj = extractJson(text) as { recipes?: Array<Record<string, unknown>> };
+  } catch {
+    obj = {};
+  }
+  const recipes = (obj.recipes ?? []).map((r, idx) => {
+    const prep = Number(r.prepMinutes ?? 0);
+    const cook = Number(r.cookMinutes ?? 0);
+    return {
+      role: "best",
+      summary: "",
+      difficulty: "easy",
+      matchScore: 0.7,
+      servings: 2,
+      usesIngredients: [],
+      pantryStaples: [],
+      missingRequired: [],
+      missingOptional: [],
+      substitutions: [],
+      equipment: [],
+      steps: [],
       safetyNotes: [],
       whyItFits: [],
       ...r,
       id: (r.id as string) ?? `${(r.role as string) ?? "recipe"}-${idx}`,
-    }));
-    return GenerateRecipesResponse.parse({ recipes, modelName: model() });
-  },
-};
+      prepMinutes: prep,
+      cookMinutes: cook,
+      totalMinutes: Number(r.totalMinutes ?? prep + cook),
+    };
+  });
+  return GenerateRecipesResponse.safeParse({ recipes, modelName: model() });
+}
