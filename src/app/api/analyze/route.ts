@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { getProvider } from "@/ai/provider";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 
+// Vision on several photos can take a while — allow up to 60s (spec §16).
+export const maxDuration = 60;
+
 const MAX_IMAGES = 5;
 const MAX_BYTES = 8 * 1024 * 1024; // per image, after client compression
 
@@ -41,10 +44,12 @@ export async function POST(req: Request) {
     );
     const result = await getProvider().analyzeIngredients({ images });
     return NextResponse.json(result);
-  } catch {
-    return NextResponse.json(
-      { error: "We couldn't analyse those photos. Please try again." },
-      { status: 500 },
-    );
+  } catch (e) {
+    const msg = e instanceof Error ? e.message.toLowerCase() : "";
+    const hint =
+      msg.includes("dimension") || msg.includes("2000") || msg.includes("size")
+        ? "Those photos may be too large — try fewer photos or move a bit further back."
+        : "We couldn't analyse those photos. Please try again with brighter, spread-out photos.";
+    return NextResponse.json({ error: hint }, { status: 500 });
   }
 }

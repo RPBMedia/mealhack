@@ -42,7 +42,7 @@ export const anthropicProvider: AiProvider = {
   async analyzeIngredients(input: AnalyzeInput) {
     const msg = await anthropic().messages.create({
       model: model(),
-      max_tokens: 1500,
+      max_tokens: 2000,
       system: INGREDIENT_ANALYSIS_SYSTEM,
       messages: [
         {
@@ -61,18 +61,7 @@ export const anthropicProvider: AiProvider = {
         },
       ],
     });
-
-    const obj = extractJson(textOf(msg)) as {
-      ingredients?: Array<Record<string, unknown>>;
-    };
-    const ingredients = (obj.ingredients ?? []).map((i, idx) => ({
-      ...i,
-      id: (i.id as string) ?? `d${idx}`,
-      requiresConfirmation:
-        (i.requiresConfirmation as boolean) ??
-        ((i.confidence as number) ?? 1) < 0.6,
-    }));
-    return AnalyzeResponse.parse({ ingredients, modelName: model() });
+    return coerceIngredients(textOf(msg));
   },
 
   async generateRecipes(input: GenerateInput) {
@@ -107,6 +96,53 @@ export const anthropicProvider: AiProvider = {
     throw new Error("recipe output failed schema after repair");
   },
 };
+
+const CATEGORIES = new Set([
+  "produce", "meat", "fish", "dairy", "egg", "grain", "legume",
+  "condiment", "spice", "leftover", "packaged", "other",
+]);
+const STATES = new Set(["fresh", "frozen", "cooked", "opened", "unknown"]);
+
+/** Tolerant parse of the analysis output: coerce categories/confidence, fill
+ * defaults, drop unnamed items, and never throw (empty list on total failure
+ * so the user can still add ingredients manually). */
+function coerceIngredients(text: string) {
+  let obj: { ingredients?: Array<Record<string, unknown>> } = {};
+  try {
+    obj = extractJson(text) as { ingredients?: Array<Record<string, unknown>> };
+  } catch {
+    obj = {};
+  }
+  const raw = Array.isArray(obj.ingredients) ? obj.ingredients : [];
+  const ingredients = raw
+    .map((i, idx) => {
+      let conf = Number(i.confidence ?? 0.7);
+      if (!Number.isFinite(conf)) conf = 0.7;
+      if (conf > 1) conf = conf / 100;
+      conf = Math.max(0, Math.min(1, conf));
+      return {
+        id: (i.id as string) || `d${idx}`,
+        name: String(i.name ?? "").trim(),
+        category: CATEGORIES.has(i.category as string)
+          ? (i.category as string)
+          : "other",
+        confidence: conf,
+        estimatedQuantity: i.estimatedQuantity
+          ? String(i.estimatedQuantity)
+          : undefined,
+        state: STATES.has(i.state as string) ? (i.state as string) : undefined,
+        sourceImageIndex:
+          typeof i.sourceImageIndex === "number" ? i.sourceImageIndex : undefined,
+        requiresConfirmation:
+          typeof i.requiresConfirmation === "boolean"
+            ? i.requiresConfirmation
+            : conf < 0.6,
+      };
+    })
+    .filter((i) => i.name.length > 0);
+  const parsed = AnalyzeResponse.safeParse({ ingredients, modelName: model() });
+  return parsed.success ? parsed.data : { ingredients: [], modelName: model() };
+}
 
 /** Parse model text into a validated recipes response, filling sane defaults
  * for fields models commonly omit. Returns a Zod SafeParse result. */

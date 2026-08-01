@@ -5,6 +5,9 @@ import { Preferences } from "@/lib/schemas";
 import { validateRecipeSet } from "@/lib/validate-recipes";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 
+// Generating (and possibly repairing) three recipes can take a while.
+export const maxDuration = 60;
+
 const Body = z.object({
   available: z.array(z.object({ name: z.string(), useFirst: z.boolean() })).min(1),
   staples: z.array(z.string()),
