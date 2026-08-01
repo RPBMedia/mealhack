@@ -1,10 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button, Container, Logo } from "@/components/ui";
 import { useMealSession } from "@/lib/session";
+import { useAuth } from "@/lib/auth";
+import {
+  loadDefaultPreferences,
+  saveDefaultPreferences,
+} from "@/lib/account-data";
 import {
   DEFAULT_PREFERENCES,
   GenerateRecipesResponse,
@@ -37,9 +42,27 @@ const ALLERGENS = ["Peanuts", "Tree nuts", "Milk", "Eggs", "Fish", "Shellfish", 
 export default function PreferencesPage() {
   const router = useRouter();
   const { session, setPreferences, setRecipes } = useMealSession();
+  const { account } = useAuth();
   const [p, setP] = useState<Preferences>(session.preferences ?? DEFAULT_PREFERENCES);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [saveDefault, setSaveDefault] = useState(false);
+
+  // Pre-fill from the signed-in user's saved defaults (once, if they haven't
+  // already set preferences this session).
+  useEffect(() => {
+    if (!account || session.preferences) return;
+    let cancelled = false;
+    void loadDefaultPreferences().then((d) => {
+      if (!cancelled && d) {
+        setP(d);
+        setSaveDefault(true);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [account, session.preferences]);
 
   const set = (patch: Partial<Preferences>) => setP((cur) => ({ ...cur, ...patch }));
   const toggle = (key: "diet" | "allergies", v: string) =>
@@ -56,6 +79,7 @@ export default function PreferencesPage() {
     setError(null);
     setGenerating(true);
     setPreferences(p);
+    if (account && saveDefault) void saveDefaultPreferences(p);
     track("recipe_generation_started", { servings: p.servings, effort: p.effort });
     try {
       const res = await fetch("/api/recipes/generate", {
@@ -192,6 +216,18 @@ export default function PreferencesPage() {
               </span>
             </button>
           </Field>
+
+          {account && (
+            <label className="mt-7 flex cursor-pointer items-center gap-3 text-sm text-ink-soft">
+              <input
+                type="checkbox"
+                checked={saveDefault}
+                onChange={(e) => setSaveDefault(e.target.checked)}
+                className="h-5 w-5 accent-[color:var(--basil)]"
+              />
+              Remember these as my defaults
+            </label>
+          )}
 
           {error && (
             <p role="alert" className="mt-4 rounded-xl bg-tomato/10 px-4 py-3 text-sm font-600 text-tomato">

@@ -6,6 +6,7 @@ import { Button, ButtonLink, Container, Logo } from "@/components/ui";
 import { useMealSession } from "@/lib/session";
 import type { GeneratedRecipe, RecipeIngredient } from "@/lib/schemas";
 import { track } from "@/lib/analytics";
+import { SaveButton } from "@/components/SaveButton";
 
 export default function RecipeDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -39,9 +40,12 @@ export default function RecipeDetailPage() {
   return (
     <Shell>
       <div className="pb-32 pt-4">
-        <Link href="/recipes" className="text-sm font-600 text-ink-soft hover:text-ink">
-          ← All recipes
-        </Link>
+        <div className="flex items-center justify-between gap-3">
+          <Link href="/recipes" className="text-sm font-600 text-ink-soft hover:text-ink">
+            ← All recipes
+          </Link>
+          <SaveButton recipe={recipe} />
+        </div>
 
         <h1 className="mt-3 font-[family-name:var(--font-fraunces)] text-3xl font-700 leading-tight text-ink">
           {recipe.title}

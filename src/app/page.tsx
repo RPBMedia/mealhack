@@ -1,4 +1,5 @@
 import { ButtonLink, Card, Container, Eyebrow, Logo } from "@/components/ui";
+import { AccountNav } from "@/components/AccountNav";
 
 export default function Home() {
   return (
@@ -6,12 +7,15 @@ export default function Home() {
       <header className="border-b border-line">
         <Container className="flex items-center justify-between py-4">
           <Logo className="text-2xl" />
-          <a
-            href="#how"
-            className="text-sm font-600 text-ink-soft hover:text-ink"
-          >
-            How it works
-          </a>
+          <div className="flex items-center gap-4">
+            <a
+              href="#how"
+              className="hidden text-sm font-600 text-ink-soft hover:text-ink sm:block"
+            >
+              How it works
+            </a>
+            <AccountNav />
+          </div>
         </Container>
       </header>
 
