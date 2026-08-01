@@ -1265,6 +1265,12 @@ Goal: make Mealhack useful across repeated sessions.
 
 Tasks:
 
+- Alternative free-text ingredient entry: on the start/scan screen the user
+  chooses between **taking photos** or **typing what they have** in free text.
+  When they type their ingredients, parse the text into the ingredient list and
+  jump **straight to the "How should we cook?" preferences screen**, skipping the
+  photo-confirmation step (there is nothing AI-detected to confirm). Photos still
+  route through the mandatory confirmation screen as today.
 - Google login;
 - Apple login;
 - email magic link;
