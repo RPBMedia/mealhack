@@ -50,10 +50,12 @@ export async function POST(req: Request) {
     }
 
     if (!check.ok) {
+      const debug = new URL(req.url).searchParams.get("debug") === "1";
       return NextResponse.json(
         {
           error:
             "We couldn't put together three solid recipes from that. Try adjusting your ingredients or constraints.",
+          ...(debug ? { detail: check.errors } : {}),
         },
         { status: 422 },
       );
