@@ -55,6 +55,20 @@ describe("validateRecipe", () => {
     expect(v.errors.join()).toMatch(/Halloumi/);
   });
 
+  it("accepts plural/descriptor ingredients named more loosely in the steps", () => {
+    const v = validateRecipe(
+      validRecipe({
+        usesIngredients: [{ name: "Eggs" }, { name: "Feta cheese" }],
+        steps: [
+          { number: 1, instruction: "Beat the egg in a bowl." },
+          { number: 2, instruction: "Crumble the feta over the top and serve." },
+        ],
+      }),
+      prefs(),
+    );
+    expect(v.ok).toBe(true);
+  });
+
   it("rejects an ingredient that conflicts with an allergy", () => {
     const v = validateRecipe(
       validRecipe({

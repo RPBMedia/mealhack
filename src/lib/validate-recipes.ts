@@ -5,6 +5,21 @@ const FISH = /fish|salmon|tuna|cod|prawn|shrimp|anchov|seafood/i;
 const ANIMAL = /milk|cheese|butter|cream|yogh?urt|egg|honey/i;
 
 const norm = (s: string) => s.toLowerCase().replace(/\s*\(.*\)\s*/g, "").trim();
+const singular = (w: string) => w.replace(/(ies)$/, "y").replace(/(es|s)$/, "");
+
+/** Does the method text mention this ingredient? Tolerant of plural/singular
+ * ("eggs" vs "egg") and descriptors ("feta cheese" → "feta", "red onion" →
+ * "onion") so concise steps don't trip a literal substring match. */
+function methodMentions(method: string, name: string): boolean {
+  const n = norm(name);
+  if (n && method.includes(n)) return true;
+  if (n && method.includes(singular(n))) return true;
+  // any significant word of a multi-word name (singular or plural)
+  return n
+    .split(/\s+/)
+    .filter((w) => w.length >= 3)
+    .some((w) => method.includes(w) || method.includes(singular(w)));
+}
 
 export interface RecipeValidation {
   ok: boolean;
@@ -36,7 +51,7 @@ export function validateRecipe(
   // every used ingredient must appear somewhere in the method
   const method = r.steps.map((s) => norm(s.instruction)).join(" | ");
   for (const u of r.usesIngredients) {
-    if (!method.includes(norm(u.name)))
+    if (!methodMentions(method, u.name))
       errors.push(`"${u.name}" never appears in the steps`);
   }
 

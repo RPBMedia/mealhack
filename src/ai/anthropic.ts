@@ -64,13 +64,22 @@ export const anthropicProvider: AiProvider = {
   },
 
   async generateRecipes(input: GenerateInput) {
-    // Fan the three roles out into parallel single-recipe calls. Each is ~1/3
-    // the output of a combined generation, so the whole set finishes in roughly
-    // the time of the slowest one — keeping us well under the serverless budget
-    // and isolating a truncation/parse failure to a single recipe.
-    const roles = ["fastest", "best", "different"] as const;
+    // Each recipe is its own single-recipe call (~1/3 the output of a combined
+    // generation), keeping us well under the serverless time budget and
+    // isolating a truncation/parse failure to a single recipe. "fastest" and
+    // "best" run in parallel; "different" then runs steered away from those two
+    // so the trio is genuinely varied (parallel calls can't see each other and
+    // otherwise converge on the obvious dish).
     const user = recipeGenerationUser(input);
-    const recipes = await Promise.all(roles.map((role) => genOneRecipe(user, role)));
+    const [fastest, best] = await Promise.all([
+      genOneRecipe(user, "fastest"),
+      genOneRecipe(user, "best"),
+    ]);
+    const avoid = [fastest, best]
+      .map((r) => String(r.title ?? ""))
+      .filter(Boolean);
+    const different = await genOneRecipe(user, "different", avoid);
+    const recipes = [fastest, best, different];
 
     const parsed = GenerateRecipesResponse.safeParse({ recipes, modelName: model() });
     if (parsed.success) return parsed.data;
@@ -80,17 +89,22 @@ export const anthropicProvider: AiProvider = {
 
 /** Generate one recipe of the given role, with a single retry on parse
  * failure. The role is forced onto the result so the assembled set always has
- * one of each. */
+ * one of each. `avoid` steers the recipe away from named dishes. */
 async function genOneRecipe(
   user: string,
   role: "fastest" | "best" | "different",
+  avoid: string[] = [],
 ): Promise<Record<string, unknown>> {
+  const content =
+    avoid.length > 0
+      ? `${user}\n\nMake this recipe clearly different from these dishes — a different cuisine or format: ${avoid.join("; ")}.`
+      : user;
   for (let attempt = 0; attempt < 2; attempt++) {
     const msg = await anthropic().messages.create({
       model: model(),
       max_tokens: 3000,
       system: singleRecipeSystem(role),
-      messages: [{ role: "user", content: user }],
+      messages: [{ role: "user", content }],
     });
     const recipe = coerceOneRecipe(textOf(msg), role);
     if (recipe) return recipe;
