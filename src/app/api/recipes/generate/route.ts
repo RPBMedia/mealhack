@@ -62,9 +62,13 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json(result);
-  } catch {
+  } catch (e) {
+    const debug = new URL(req.url).searchParams.get("debug") === "1";
     return NextResponse.json(
-      { error: "Recipe generation failed. Please try again." },
+      {
+        error: "Recipe generation failed. Please try again.",
+        ...(debug ? { detail: e instanceof Error ? e.message : String(e) } : {}),
+      },
       { status: 500 },
     );
   }

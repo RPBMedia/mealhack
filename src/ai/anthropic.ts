@@ -1,5 +1,9 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { AnalyzeResponse, GenerateRecipesResponse } from "@/lib/schemas";
+import {
+  AnalyzeResponse,
+  GeneratedRecipe,
+  GenerateRecipesResponse,
+} from "@/lib/schemas";
 import type { AiProvider, AnalyzeInput } from "./provider";
 import type { GenerateInput } from "./recipe-fixtures";
 import {
@@ -94,15 +98,15 @@ async function genOneRecipe(
   user: string,
   role: "fastest" | "best" | "different",
   avoid: string[] = [],
-): Promise<Record<string, unknown>> {
+): Promise<GeneratedRecipe> {
   const content =
     avoid.length > 0
       ? `${user}\n\nMake this recipe clearly different from these dishes — a different cuisine or format: ${avoid.join("; ")}.`
       : user;
-  for (let attempt = 0; attempt < 2; attempt++) {
+  for (let attempt = 0; attempt < 3; attempt++) {
     const msg = await anthropic().messages.create({
       model: model(),
-      max_tokens: 3000,
+      max_tokens: 4000,
       system: singleRecipeSystem(role),
       messages: [{ role: "user", content }],
     });
@@ -192,11 +196,12 @@ function normalizeRecipe(
 }
 
 /** Parse one-recipe model output ({"recipe":R}, or a bare recipe object) into a
- * normalized recipe. Returns null if nothing usable could be extracted. */
+ * schema-valid recipe. Returns null if it can't be parsed or fails the schema,
+ * so the caller retries rather than letting one bad field fail the whole set. */
 function coerceOneRecipe(
   text: string,
   role: "fastest" | "best" | "different",
-): Record<string, unknown> | null {
+): GeneratedRecipe | null {
   let obj: Record<string, unknown> = {};
   try {
     obj = extractJson(text) as Record<string, unknown>;
@@ -205,5 +210,6 @@ function coerceOneRecipe(
   }
   const raw = (obj.recipe as Record<string, unknown>) ?? obj;
   if (!raw || typeof raw !== "object" || !raw.title) return null;
-  return normalizeRecipe(raw, 0, role);
+  const parsed = GeneratedRecipe.safeParse(normalizeRecipe(raw, 0, role));
+  return parsed.success ? parsed.data : null;
 }
