@@ -7,10 +7,9 @@ import {
   INGREDIENT_ANALYSIS_USER,
 } from "./prompts/ingredient-analysis";
 import {
-  RECIPE_GENERATION_SYSTEM,
   recipeGenerationUser,
+  singleRecipeSystem,
 } from "./prompts/recipe-generation";
-import { RECIPE_REPAIR_SYSTEM } from "./prompts/recipe-repair";
 
 let client: Anthropic | null = null;
 function anthropic(): Anthropic {
@@ -65,37 +64,39 @@ export const anthropicProvider: AiProvider = {
   },
 
   async generateRecipes(input: GenerateInput) {
-    const first = await anthropic().messages.create({
-      model: model(),
-      max_tokens: 8000,
-      system: RECIPE_GENERATION_SYSTEM,
-      messages: [{ role: "user", content: recipeGenerationUser(input) }],
-    });
-    const firstText = textOf(first);
+    // Fan the three roles out into parallel single-recipe calls. Each is ~1/3
+    // the output of a combined generation, so the whole set finishes in roughly
+    // the time of the slowest one — keeping us well under the serverless budget
+    // and isolating a truncation/parse failure to a single recipe.
+    const roles = ["fastest", "best", "different"] as const;
+    const user = recipeGenerationUser(input);
+    const recipes = await Promise.all(roles.map((role) => genOneRecipe(user, role)));
 
-    const parsed = coerceRecipes(firstText);
+    const parsed = GenerateRecipesResponse.safeParse({ recipes, modelName: model() });
     if (parsed.success) return parsed.data;
-
-    // One repair attempt with the raw output + validation errors (spec §6.8).
-    const repair = await anthropic().messages.create({
-      model: model(),
-      max_tokens: 8000,
-      system: RECIPE_REPAIR_SYSTEM,
-      messages: [
-        {
-          role: "user",
-          content: JSON.stringify({
-            invalidOutput: firstText.slice(0, 12000),
-            schemaErrors: parsed.error.issues.slice(0, 12),
-          }),
-        },
-      ],
-    });
-    const repaired = coerceRecipes(textOf(repair));
-    if (repaired.success) return repaired.data;
-    throw new Error("recipe output failed schema after repair");
+    throw new Error("recipe output failed schema after generation");
   },
 };
+
+/** Generate one recipe of the given role, with a single retry on parse
+ * failure. The role is forced onto the result so the assembled set always has
+ * one of each. */
+async function genOneRecipe(
+  user: string,
+  role: "fastest" | "best" | "different",
+): Promise<Record<string, unknown>> {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const msg = await anthropic().messages.create({
+      model: model(),
+      max_tokens: 3000,
+      system: singleRecipeSystem(role),
+      messages: [{ role: "user", content: user }],
+    });
+    const recipe = coerceOneRecipe(textOf(msg), role);
+    if (recipe) return recipe;
+  }
+  throw new Error(`failed to generate "${role}" recipe`);
+}
 
 const CATEGORIES = new Set([
   "produce", "meat", "fish", "dairy", "egg", "grain", "legume",
@@ -144,39 +145,51 @@ function coerceIngredients(text: string) {
   return parsed.success ? parsed.data : { ingredients: [], modelName: model() };
 }
 
-/** Parse model text into a validated recipes response, filling sane defaults
- * for fields models commonly omit. Returns a Zod SafeParse result. */
-function coerceRecipes(text: string) {
-  let obj: { recipes?: Array<Record<string, unknown>> } = {};
+/** Fill sane defaults for fields models commonly omit, and force the role so
+ * the assembled set always has one of each. */
+function normalizeRecipe(
+  r: Record<string, unknown>,
+  idx: number,
+  roleFallback: string,
+): Record<string, unknown> {
+  const prep = Number(r.prepMinutes ?? 0);
+  const cook = Number(r.cookMinutes ?? 0);
+  return {
+    summary: "",
+    difficulty: "easy",
+    matchScore: 0.7,
+    servings: 2,
+    usesIngredients: [],
+    pantryStaples: [],
+    missingRequired: [],
+    missingOptional: [],
+    substitutions: [],
+    equipment: [],
+    steps: [],
+    safetyNotes: [],
+    whyItFits: [],
+    ...r,
+    role: roleFallback,
+    id: (r.id as string) ?? `${roleFallback}-${idx}`,
+    prepMinutes: prep,
+    cookMinutes: cook,
+    totalMinutes: Number(r.totalMinutes ?? prep + cook),
+  };
+}
+
+/** Parse one-recipe model output ({"recipe":R}, or a bare recipe object) into a
+ * normalized recipe. Returns null if nothing usable could be extracted. */
+function coerceOneRecipe(
+  text: string,
+  role: "fastest" | "best" | "different",
+): Record<string, unknown> | null {
+  let obj: Record<string, unknown> = {};
   try {
-    obj = extractJson(text) as { recipes?: Array<Record<string, unknown>> };
+    obj = extractJson(text) as Record<string, unknown>;
   } catch {
-    obj = {};
+    return null;
   }
-  const recipes = (obj.recipes ?? []).map((r, idx) => {
-    const prep = Number(r.prepMinutes ?? 0);
-    const cook = Number(r.cookMinutes ?? 0);
-    return {
-      role: "best",
-      summary: "",
-      difficulty: "easy",
-      matchScore: 0.7,
-      servings: 2,
-      usesIngredients: [],
-      pantryStaples: [],
-      missingRequired: [],
-      missingOptional: [],
-      substitutions: [],
-      equipment: [],
-      steps: [],
-      safetyNotes: [],
-      whyItFits: [],
-      ...r,
-      id: (r.id as string) ?? `${(r.role as string) ?? "recipe"}-${idx}`,
-      prepMinutes: prep,
-      cookMinutes: cook,
-      totalMinutes: Number(r.totalMinutes ?? prep + cook),
-    };
-  });
-  return GenerateRecipesResponse.safeParse({ recipes, modelName: model() });
+  const raw = (obj.recipe as Record<string, unknown>) ?? obj;
+  if (!raw || typeof raw !== "object" || !raw.title) return null;
+  return normalizeRecipe(raw, 0, role);
 }
